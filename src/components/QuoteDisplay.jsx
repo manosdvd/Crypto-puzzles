@@ -15,13 +15,13 @@ export default function QuoteDisplay({
     let globalCharIndex = 0; // Reset this before rendering the quote
 
     const renderWord = (word, wordIndex) => (
-        <div key={wordIndex} className="flex flex-wrap gap-1 mr-8 mb-6">
+        <div key={wordIndex} className="flex flex-nowrap max-w-full gap-1 mr-2 sm:mr-8 mb-6">
             {word.split('').map((char, charIndex) => {
                 const currentIdx = globalCharIndex++; // Capture current global index
 
                 if (!isLetter(char)) {
                     return (
-                        <div key={charIndex} className="flex flex-col justify-end w-4 sm:w-6 h-16 sm:h-20 pb-2 items-center">
+                        <div key={charIndex} className="flex flex-col justify-end w-4 sm:w-6 h-16 sm:h-20 pb-2 items-center shrink min-w-0">
                             <span className="text-xl sm:text-3xl text-slate-800 font-bold">{char}</span>
                         </div>
                     );
@@ -34,7 +34,7 @@ export default function QuoteDisplay({
                 const isHinted = hintedChars.has(encryptedChar);
 
                 // Validation styles
-                const isWrong = checkMode && userGuess && userGuess !== char;
+                const isWrong = checkMode && userGuess !== char;
                 const isCorrect = solved || (checkMode && userGuess === char) || isHinted;
 
                 return (
@@ -47,7 +47,7 @@ export default function QuoteDisplay({
                         }}
                         className={`
               flex flex-col items-center cursor-pointer transition-all duration-150 group
-              w-10 sm:w-12 relative
+              w-10 sm:w-12 relative shrink min-w-0
             `}
                     >
 
