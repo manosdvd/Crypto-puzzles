@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Trophy } from 'lucide-react';
 import Header from './components/Header';
 import QuoteDisplay from './components/QuoteDisplay';

@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { RefreshCw, Info } from 'lucide-react';
 
 export default function Header({ loading, onNewGame }) {

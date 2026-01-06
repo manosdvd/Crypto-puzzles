@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { isLetter } from '../utils/cipher';
 
 export default function QuoteDisplay({

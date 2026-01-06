@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Lightbulb, CheckCircle, Info, Eraser } from 'lucide-react';
 
 export default function GameControls({ onHint, onCheck, onClear, checkMode, selectedEncryptedChar, hintedChars }) {
