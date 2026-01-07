@@ -5,11 +5,15 @@ A modern, interactive Cryptogram puzzle game built with React and Vite. Decrypt 
 ## Features
 
 - **Infinite Puzzles**: Fetches new quotes dynamically for endless gameplay.
+- **Rich Content**: 
+  - **Famous Opening Lines**: Includes iconic opening lines from books and movies.
+  - **Funny Quotes**: curated collection of witty and humorous quotes.
 - **Interactive UI**: polished interface with real-time feedback.
 - **Smart Helpers**:
-  - **Hints**: Get a letter revealed if you're stuck.
+  - **Intelligent Hints**: Prioritizes revealing the currently selected letter if you're stuck.
   - **Check Work**: Highlight incorrect letters to track your progress.
   - **Clear Mistakes**: Quickly remove incorrect guesses.
+- **Performance**: Optimized rendering engine for smooth gameplay on any device.
 - **Keyboard Support**: Full physical keyboard support for desktop users, along with an on-screen keyboard.
 - **Winning Animations**: Celebrating your success with confetti!
 - **Responsive Design**: optimized for both desktop and mobile play.
