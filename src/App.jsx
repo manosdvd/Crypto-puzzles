@@ -307,6 +307,39 @@ export default function App() {
     const giveHint = () => {
         if (solved || !originalQuote) return;
 
+        // 1. Try to hint the CURRENTLY selected character
+        if (selectedEncryptedChar && !hintedChars.has(selectedEncryptedChar)) {
+            const correctPlain = reverseCipher[selectedEncryptedChar];
+            const currentGuess = userGuesses[selectedEncryptedChar];
+
+            // Only hint if it's not arguably already correct (though usually hints lock it in)
+            // Actually, hints should allow you to lock in even if you guessed right, or correct you if wrong.
+            // So simply always allow if not already hinted.
+
+            setHintedChars(prev => new Set(prev).add(selectedEncryptedChar));
+            setUserGuesses(prev => {
+                const newGuesses = { ...prev };
+                newGuesses[selectedEncryptedChar] = correctPlain;
+
+                // Win Check Helper
+                const isComplete = originalQuote.split('').every(char => {
+                    if (!isLetter(char)) return true;
+                    const encrypted = cipher[char];
+                    return newGuesses[encrypted] === char;
+                });
+
+                if (isComplete) {
+                    setSolved(true);
+                    setShowConfetti(true);
+                    setCursorIndex(null);
+                    setCheckMode(false);
+                }
+                return newGuesses;
+            });
+            return;
+        }
+
+        // 2. Fallback: Hint a random unknown/incorrect letter
         const availableHints = [];
         const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -317,6 +350,10 @@ export default function App() {
             if (hintedChars.has(encrypted)) return;
 
             const currentGuess = userGuesses[encrypted];
+            // If it's wrong OR empty, it's a valid hint candidate.
+            // Even if it's right but not "hinted" (locked), we could hint it? 
+            // Let's stick to "if not correct" or "if not hinted" logic.
+            // Explicitly: We want to help the user.
             if (currentGuess !== plainChar) {
                 availableHints.push(encrypted);
             }
@@ -332,7 +369,6 @@ export default function App() {
                 const newGuesses = { ...prev };
                 newGuesses[randomEncrypted] = correctPlain;
 
-                // duplicated win check logic
                 const isComplete = originalQuote.split('').every(char => {
                     if (!isLetter(char)) return true;
                     const encrypted = cipher[char];
