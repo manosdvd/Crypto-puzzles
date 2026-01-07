@@ -14,8 +14,8 @@ export default function QuoteDisplay({
 }) {
     let globalCharIndex = 0; // Reset this before rendering the quote
 
-    const renderWord = (word, wordIndex) => (
-        <div key={wordIndex} className="flex flex-nowrap max-w-full gap-1 mr-2 sm:mr-8 mb-6">
+    const renderWord = (word, wordIndex, isLast) => (
+        <div key={wordIndex} className={`flex flex-nowrap max-w-full gap-1 ${isLast ? '' : 'mr-6 sm:mr-10'} mb-6`}>
             {word.split('').map((char, charIndex) => {
                 const currentIdx = globalCharIndex++; // Capture current global index
 
@@ -86,8 +86,8 @@ export default function QuoteDisplay({
         <div className="flex flex-wrap justify-center content-center">
             {/* Reset globalCharIndex before rendering */}
             {(() => { globalCharIndex = 0; return null; })()}
-            {quote && quote.split(' ').map((word, i) => {
-                const el = renderWord(word, i);
+            {quote && quote.split(' ').map((word, i, arr) => {
+                const el = renderWord(word, i, i === arr.length - 1);
                 globalCharIndex++; // Add 1 for the space after the word
                 return el;
             })}

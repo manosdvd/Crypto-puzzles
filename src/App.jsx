@@ -6,11 +6,13 @@ import Keyboard from './components/Keyboard';
 import GameControls from './components/GameControls';
 import { fetchNewGameData } from './utils/api';
 import { isLetter } from './utils/cipher';
+import { saveGameState, loadGameState, clearGameState } from './utils/storage';
 
 export default function App() {
     const [loading, setLoading] = useState(true);
     const [originalQuote, setOriginalQuote] = useState(null);
     const [author, setAuthor] = useState("");
+    const [source, setSource] = useState("");
     const [cipher, setCipher] = useState({}); // Map: Plain char -> Encrypted char
     const [reverseCipher, setReverseCipher] = useState({}); // Map: Encrypted char -> Plain char
     const [userGuesses, setUserGuesses] = useState({}); // Map: Encrypted char -> User guessed char
@@ -30,7 +32,20 @@ export default function App() {
         return cipher[plainChar];
     }, [cursorIndex, originalQuote, cipher]);
 
-    const startNewGame = useCallback(async () => {
+    // Calculate duplicate assignments (same letter used for different encrypted chars)
+    const duplicateLetters = useMemo(() => {
+        const counts = {};
+        const duplicates = new Set();
+        Object.values(userGuesses).forEach(char => {
+            counts[char] = (counts[char] || 0) + 1;
+        });
+        Object.entries(counts).forEach(([char, count]) => {
+            if (count > 1) duplicates.add(char);
+        });
+        return duplicates;
+    }, [userGuesses]);
+
+    const startNewGame = useCallback(async (isRetry = false) => {
         setLoading(true);
         setSolved(false);
         setUserGuesses({});
@@ -38,25 +53,77 @@ export default function App() {
         setCheckMode(false);
         setHintedChars(new Set());
         setShowConfetti(false);
+        clearGameState();
 
         const data = await fetchNewGameData();
         setOriginalQuote(data.quote);
         setAuthor(data.author);
+        setSource(data.source);
         setCipher(data.cipher);
         setReverseCipher(data.reverseCipher);
         setLoading(false);
     }, []);
 
-    // Initial Load
+    // Initial Load / Persistence
     useEffect(() => {
-        startNewGame();
+        const saved = loadGameState();
+        if (saved && saved.originalQuote) {
+            setOriginalQuote(saved.originalQuote);
+            setAuthor(saved.author);
+            setSource(saved.source);
+            setCipher(saved.cipher);
+            setReverseCipher(saved.reverseCipher);
+            setUserGuesses(saved.userGuesses);
+            setHintedChars(saved.hintedChars);
+            setSolved(saved.solved);
+            setLoading(false);
+        } else {
+            startNewGame();
+        }
     }, [startNewGame]);
+
+    // Save state on change
+    useEffect(() => {
+        if (!loading && originalQuote) {
+            saveGameState({
+                originalQuote,
+                author,
+                source,
+                cipher,
+                reverseCipher,
+                userGuesses,
+                hintedChars,
+                solved
+            });
+        }
+    }, [loading, originalQuote, author, source, cipher, reverseCipher, userGuesses, hintedChars, solved]);
+
 
     // Helper to find valid letter indices for navigation
     const getLetterIndices = useCallback(() => {
         if (!originalQuote) return [];
         return originalQuote.split('').map((c, i) => isLetter(c) ? i : -1).filter(i => i !== -1);
     }, [originalQuote]);
+
+    // Auto-focus first empty cell on load if not solved
+    useEffect(() => {
+        if (!loading && !solved && cursorIndex === null && originalQuote) {
+            const indices = getLetterIndices();
+            if (indices.length > 0) {
+                // Find first unfilled
+                let firstUnfilled = indices.find(idx => {
+                    const char = originalQuote[idx];
+                    const enc = cipher[char];
+                    return !userGuesses[enc];
+                });
+
+                // If all filled (but not solved?), fallback to first
+                if (firstUnfilled === undefined) firstUnfilled = indices[0];
+
+                setCursorIndex(firstUnfilled);
+            }
+        }
+    }, [loading, solved, originalQuote, getLetterIndices, cipher, userGuesses]); // Careful with dependencies to avoid sticky focusing
 
     // Handle Navigation
     const moveCursor = useCallback((direction) => {
@@ -92,11 +159,6 @@ export default function App() {
                 newGuesses[selectedEncryptedChar] = guessChar;
             }
 
-            // Check win condition immediately after update
-            // We need to use the new state, so we pass it to a helper or check here
-            // But checkWinCondition needs originalQuote etc.
-            // Better to use useEffect or check here with the new object
-
             const isComplete = originalQuote.split('').every(char => {
                 if (!isLetter(char)) return true;
                 const encrypted = cipher[char];
@@ -108,6 +170,7 @@ export default function App() {
                 setShowConfetti(true);
                 setCursorIndex(null);
                 setCheckMode(false);
+                clearGameState(); // Clear state on win? Or keep it so they can see? Let's keep duplicate save logic for now.
             }
 
             return newGuesses;
@@ -133,18 +196,11 @@ export default function App() {
             }
         }
 
-        // If found, move there. 
-        // If not found, we could simply advance by 1 (behavior if all filled) or stay.
-        // Let's fallback to standard "move next" if we can't find an empty one, 
-        // so the user isn't stuck if they want to overwrite.
-        // Actually, "skip over spaces with a letter already filled" implies we stop at the next empty one.
-        // If NO empty ones, maybe we should just go to the very next one (standard behavior) or wrap?
-        // Let's default to standard move(1) if no empty spots found ahead, 
-        // so we don't lock navigation.
-
         if (nextIndex !== -1) {
             setCursorIndex(nextIndex);
         } else {
+            // If no more unfilled ahead, wrap around or just check everything?
+            // Let's just standard move(1)
             moveCursor(1);
         }
     }, [cursorIndex, originalQuote, cipher, userGuesses, getLetterIndices, moveCursor]);
@@ -173,11 +229,6 @@ export default function App() {
             setCursorIndex(rawIndex);
             return;
         }
-
-        // If we ran off the start (everything to the left is a hint or we were at 0)
-        // Check if we should clamp to 0 or just stop.
-        // If 0 is a hint, we can't select it.
-        // So we just stop if we can't find a valid spot.
     }, [cursorIndex, originalQuote, cipher, hintedChars, getLetterIndices]);
 
     // Handle keyboard input (Physical Keyboard)
@@ -279,7 +330,6 @@ export default function App() {
             const newGuesses = { ...prev };
             Object.keys(newGuesses).forEach(enc => {
                 if (hintedChars.has(enc)) return;
-                // Previously checked if wrong, now verify we want to delete ALL non-hints
                 delete newGuesses[enc];
             });
             return newGuesses;
@@ -292,7 +342,7 @@ export default function App() {
             className="h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-200 flex flex-col overflow-hidden"
             onClick={() => setCursorIndex(null)}
         >
-            <Header loading={loading} onNewGame={startNewGame} />
+            <Header loading={loading} onNewGame={() => startNewGame()} />
 
             <main className="flex-grow overflow-y-auto w-full bg-slate-50 relative">
                 <div className="max-w-4xl mx-auto px-4 py-6 pb-64">
@@ -340,7 +390,7 @@ export default function App() {
                             )}
 
                             <footer className="mt-8 text-center text-slate-400 text-xs">
-                                Cryptogram Challenge • Data provided by dummyjson.com
+                                Cryptogram Challenge • Data provided by {source || 'Unknown'}
                             </footer>
                         </>
                     )}
@@ -349,46 +399,6 @@ export default function App() {
 
             {!solved && !loading && (
                 <>
-                    {/* Keyboard uses fixed positioning in mobile if needed, but here it's inside the flow relative to controls? 
-                Actually in main.txt Keyboard was inside the persistent bottom area.
-                Here I put GameControls in the bottom. I should put Keyboard there too.
-            */}
-                    {/* Wait, GameControls component in my design only included the buttons. 
-               The original had buttons AND keyboard in the fixed bottom div. 
-               Member? "Persistent Controls Area - Fixed Bottom" -> Action Bar + Helper Text + Keyboard.
-               My GameControls component only has Action Bar + Helper Text. 
-               I need to render Keyboard INSIDE the fixed bottom area or adjacent?
-               
-               Let's look at GameControls.jsx I wrote.
-               It has the wrapper `div className="flex-none bg-white ... fixed bottom..."`.
-               It DOES NOT accept children.
-               
-               I made a mistake in decomposition. GameControls as written is the entire bottom bar but without the keyboard slot?
-               Let's check GameControls.jsx content again (from my memory/tool).
-               
-               It has "Action Bar" and "Helper Text". It closes the div.
-               It does NOT include the keyboard.
-               
-               So currently Keyboard would be rendered... where?
-               In App.jsx I put GameControls. 
-               I need to put Keyboard inside the GameControls or make GameControls accept children or just put them in a container in App.jsx.
-               
-               However, GameControls.jsx has the "fixed bottom" styles: `flex-none bg-white ...`.
-               If I render Keyboard after it, it will be below it?
-               
-               I should probably modify App.jsx to wrap them, or modify GameControls to accept children (the keyboard).
-               OR easier:
-               I will change the structure in App.jsx.
-               Since GameControls component 'owns' the bottom fixed container in my current specific implementation, I can't easily append.
-               
-               Actually, I'll rewrite GameControls to just be the component for the buttons, and remove the outer fixed wrapper from it?
-               Or I will render Keyboard INSIDE the GameControls component? No, keep them separate.
-               
-               I'll update GameControls to NOT be the fixed wrapper, just the buttons + helper.
-               And in App.jsx create the fixed wrapper that contains GameControls and Keyboard.
-               
-               This is cleaner.
-           */}
                     <div
                         className="flex-none bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20 w-full"
                         onClick={(e) => e.stopPropagation()}
@@ -413,6 +423,8 @@ export default function App() {
                             selectedEncryptedChar={selectedEncryptedChar}
                             solved={solved}
                             hintedChars={hintedChars}
+                            usedLetters={new Set(Object.values(userGuesses))}
+                            duplicateLetters={duplicateLetters}
                         />
                     </div>
                 </>
