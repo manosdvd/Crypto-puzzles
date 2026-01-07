@@ -34,7 +34,7 @@ export default function Keyboard({ onGuess, onDelete, selectedEncryptedChar, sol
                                 }}
                                 disabled={!selectedEncryptedChar || solved || hintedChars.has(selectedEncryptedChar)}
                                 className={`
-                  w-8 h-10 sm:w-9 sm:h-12 rounded shadow-sm text-sm sm:text-lg font-semibold transition-colors
+                  flex-1 max-w-[40px] h-10 sm:h-12 rounded shadow-sm text-sm sm:text-lg font-semibold transition-colors
                   active:scale-90 active:bg-blue-100
                   ${btnClass}
                 `}
