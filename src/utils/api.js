@@ -1,6 +1,5 @@
 import { generateCipher } from './cipher';
 import { CUSTOM_QUOTES } from '../data/customQuotes';
-import BULK_QUOTES from '../data/bulkQuotes.json';
 
 const SEEN_STORAGE_KEY = 'crypto_puzzle_seen_hashes';
 const MAX_HISTORY = 50;
@@ -88,6 +87,10 @@ export const fetchNewGameData = async () => {
 
             if (rand < 0.7) {
                 // Bulk Database
+                // Dynamic Import
+                const module = await import('../data/bulkQuotes.json');
+                const BULK_QUOTES = module.default || module;
+
                 const item = BULK_QUOTES[Math.floor(Math.random() * BULK_QUOTES.length)];
                 rawQuoteData = {
                     quote: item.quoteText,
@@ -104,6 +107,9 @@ export const fetchNewGameData = async () => {
                     rawQuoteData = await fetchFromDummyJSON();
                 } catch (e) {
                     console.warn("DummyJSON failed, using Bulk fallback");
+                    const module = await import('../data/bulkQuotes.json');
+                    const BULK_QUOTES = module.default || module;
+
                     const item = BULK_QUOTES[Math.floor(Math.random() * BULK_QUOTES.length)];
                     rawQuoteData = {
                         quote: item.quoteText,
@@ -138,6 +144,9 @@ export const fetchNewGameData = async () => {
     // Safety fallback if all attempts fail
     if (!rawQuoteData) {
         console.warn("All fetch attempts failed, using safety fallback.");
+        const module = await import('../data/bulkQuotes.json');
+        const BULK_QUOTES = module.default || module;
+
         const fallback = BULK_QUOTES[Math.floor(Math.random() * BULK_QUOTES.length)];
         rawQuoteData = {
             quote: fallback.quoteText,

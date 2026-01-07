@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Trophy } from 'lucide-react';
+import { Trophy, Star, Zap } from 'lucide-react';
 import Header from './components/Header';
 import QuoteDisplay from './components/QuoteDisplay';
 import Keyboard from './components/Keyboard';
 import GameControls from './components/GameControls';
 import { fetchNewGameData } from './utils/api';
 import { isLetter } from './utils/cipher';
-import { saveGameState, loadGameState, clearGameState } from './utils/storage';
+import { saveGameState, loadGameState, clearGameState, saveHighScore, loadHighScore } from './utils/storage';
+import { calculateScore } from './utils/score';
 
 export default function App() {
     const [loading, setLoading] = useState(true);
@@ -24,6 +25,12 @@ export default function App() {
     const [checkMode, setCheckMode] = useState(false);
     const [hintedChars, setHintedChars] = useState(new Set());
     const [showConfetti, setShowConfetti] = useState(false);
+    const [elapsedTime, setElapsedTime] = useState(0);
+
+    // Scoring
+    const [highScore, setHighScore] = useState(0);
+    const [scoreData, setScoreData] = useState(null);
+    const [isNewHighScore, setIsNewHighScore] = useState(false);
 
     // Derived state for the currently selected encrypted character based on cursor position
     const selectedEncryptedChar = useMemo(() => {
@@ -53,6 +60,9 @@ export default function App() {
         setCheckMode(false);
         setHintedChars(new Set());
         setShowConfetti(false);
+        setElapsedTime(0);
+        setScoreData(null);
+        setIsNewHighScore(false);
         clearGameState();
 
         const data = await fetchNewGameData();
@@ -64,8 +74,10 @@ export default function App() {
         setLoading(false);
     }, []);
 
-    // Initial Load / Persistence
+    // InitialLoad / Persistence
     useEffect(() => {
+        setHighScore(loadHighScore()); // Load high score once
+
         const saved = loadGameState();
         if (saved && saved.originalQuote) {
             setOriginalQuote(saved.originalQuote);
@@ -76,6 +88,13 @@ export default function App() {
             setUserGuesses(saved.userGuesses);
             setHintedChars(saved.hintedChars);
             setSolved(saved.solved);
+            setElapsedTime(saved.elapsedTime || 0);
+
+            // Restore score data if we solved it?
+            if (saved.solved && saved.scoreData) {
+                setScoreData(saved.scoreData);
+            }
+
             setLoading(false);
         } else {
             startNewGame();
@@ -93,10 +112,12 @@ export default function App() {
                 reverseCipher,
                 userGuesses,
                 hintedChars,
-                solved
+                solved,
+                elapsedTime,
+                scoreData
             });
         }
-    }, [loading, originalQuote, author, source, cipher, reverseCipher, userGuesses, hintedChars, solved]);
+    }, [loading, originalQuote, author, source, cipher, reverseCipher, userGuesses, hintedChars, solved, elapsedTime, scoreData]);
 
 
     // Helper to find valid letter indices for navigation
@@ -176,6 +197,20 @@ export default function App() {
             return newGuesses;
         });
     }, [solved, selectedEncryptedChar, hintedChars, originalQuote, cipher]);
+
+
+    // Handle Solve Side-Effects clearly
+    useEffect(() => {
+        if (solved && !scoreData && originalQuote) {
+            const result = calculateScore(originalQuote, elapsedTime, hintedChars.size);
+            setScoreData(result);
+            const isNew = saveHighScore(result.finalScore);
+            if (isNew) {
+                setIsNewHighScore(true);
+                setHighScore(result.finalScore);
+            }
+        }
+    }, [solved, scoreData, originalQuote, elapsedTime, hintedChars.size]);
 
     const moveCursorToNextUnfilled = useCallback(() => {
         if (!originalQuote || cursorIndex === null) return;
@@ -342,7 +377,13 @@ export default function App() {
             className="h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-200 flex flex-col overflow-hidden"
             onClick={() => setCursorIndex(null)}
         >
-            <Header loading={loading} onNewGame={() => startNewGame()} />
+            <Header
+                loading={loading}
+                onNewGame={() => startNewGame()}
+                solved={solved}
+                time={elapsedTime}
+                onTimeUpdate={setElapsedTime}
+            />
 
             <main className="flex-grow overflow-y-auto w-full bg-slate-50 relative">
                 <div className="max-w-4xl mx-auto px-4 py-6 pb-64">
@@ -353,6 +394,12 @@ export default function App() {
                         </div>
                     ) : (
                         <>
+                            <div className="flex justify-between items-center mb-4 px-2">
+                                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                    High Score: <span className="text-amber-500">{highScore.toLocaleString()}</span>
+                                </div>
+                            </div>
+
                             <div className="w-full bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-200 min-h-[150px] flex flex-col justify-center mb-6">
                                 <QuoteDisplay
                                     quote={originalQuote}
@@ -366,14 +413,43 @@ export default function App() {
                                     onSelectChar={setCursorIndex}
                                 />
 
-                                {/* Author Reveal */}
+                                {/* Author Reveal & Score */}
                                 <div className={`
                         mt-8 text-center transition-all duration-700 overflow-hidden
-                        ${solved ? 'opacity-100 max-h-20 translate-y-0' : 'opacity-0 max-h-0 translate-y-4'}
+                        ${solved ? 'opacity-100 max-h-96 translate-y-0' : 'opacity-0 max-h-0 translate-y-4'}
                     `}>
-                                    <div className="inline-flex items-center gap-2 text-green-700 font-medium px-4 py-2 bg-green-50 rounded-full border border-green-200">
-                                        <Trophy size={18} />
-                                        <span>Solved! &mdash; <span className="font-bold">{author}</span></span>
+                                    <div className="flex flex-col items-center gap-4">
+                                        <div className="inline-flex items-center gap-2 text-green-700 font-medium px-4 py-2 bg-green-50 rounded-full border border-green-200">
+                                            <Trophy size={18} />
+                                            <span>Solved! &mdash; <span className="font-bold">{author}</span></span>
+                                        </div>
+
+                                        {scoreData && (
+                                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 w-full max-w-sm">
+                                                <div className="flex items-center justify-center gap-2 text-2xl font-black text-slate-800 mb-1">
+                                                    {isNewHighScore && <Star className="text-amber-500 fill-amber-500 animate-spin-slow" />}
+                                                    <span>{scoreData.finalScore.toLocaleString()}</span>
+                                                </div>
+                                                <div className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-3">
+                                                    {isNewHighScore ? "New High Score!" : "Final Score"}
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                                                    <div className="flex justify-between">
+                                                        <span>Accuracy:</span>
+                                                        <span className="font-mono">{scoreData.baseScore}</span>
+                                                    </div>
+                                                    <div className="flex justify-between text-red-500">
+                                                        <span>Hints:</span>
+                                                        <span className="font-mono">-{scoreData.penalty}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-2 pt-2 border-t border-slate-200 flex justify-between items-center text-xs font-bold text-blue-600">
+                                                    <span className="flex items-center gap-1"><Zap size={12} /> Speed Bonus</span>
+                                                    <span>x{scoreData.multiplier.toFixed(1)} ({scoreData.rank})</span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
